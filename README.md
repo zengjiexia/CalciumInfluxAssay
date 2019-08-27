@@ -1,11 +1,11 @@
-# CalciumInfluxAssay
+# Calcium Influx Assay
 Data analysis code for Membrane Permeabilisation Assay
 
 This code was written in python 3.6. 
 
 Should work on both MacOS and Windows.
 
-Two python files must be in the same folder when processing images.
+Two python files should be put in the same folder.
 
 Special requirements in python modules:
 
