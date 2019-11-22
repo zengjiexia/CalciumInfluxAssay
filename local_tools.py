@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-LAST UPDATE 23/07/2019
+LAST UPDATE 22/11/2019
 
 Supporting code for analyze fluorescence images taken by TIRFM
 Primarily made for Protein Aggregate Detection Assay project
