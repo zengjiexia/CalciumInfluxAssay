@@ -268,3 +268,24 @@ class CalciumSample:
 			self.results[n] = result
 
 		return self.results
+		
+'''
+if __name__ == '__main__':
+	
+	Holder = {
+	'PATH' : os.path.dirname(os.path.abspath(__file__)),
+	'Threshold' : '80',
+	'Radius' : '3',
+	'High' : 200,
+	'Low' : -100
+	}
+
+	print('Input -h or -help for mannul')
+
+	stay = 1
+	command = None
+	while stay:
+		if command = '-h' or '-help':
+			print("""-info Current setting information
+				-path PATH change to a new path""")
+'''
