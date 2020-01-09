@@ -1,84 +1,81 @@
-from local_tools import *
+import local_tools 
 import os
 
-Path = r'/Users/zengjiexia/Desktop/2019-12-06 liposome_frac_2_Derya'
+
+mainPath = os.path.dirname(os.path.abspath(__file__))+'/sample_data',
 
 
-result_path = r'/Users/zengjiexia/Desktop/results'
+print('Starting...')
 
-holder = {
-'Threshold' : '50',
-'Radius' : '3',
-'High' : 200,
-'Low' : -100
-}
+if not os.path.isdir(mainPath)
+	print('Data folder does not exist. Exit.')
+	quit()
 
-def one_sample(root, item):
-	sample_path = os.path.join(root, item)
-	print('starting '+ sample_path)
-	path = {
-		'main': sample_path,
-		'ionomycin': sample_path + '/Ionomycin/',
-		'sample': sample_path + '/Sample/',
-		'blank': sample_path + '/Blank/'
-	}
-	# Error = 0, Safe = 1
-	# error_report{'path': [main, ionomycin, sample, blank]}
-	error_report = {'path': [os.path.isdir(p) for p in path.values()]} 
+resultPath = mainPath + '/results'
 
+### get all samples in the folder ###
+sampleNames = [name for name in os.listdir(mainPath) if not name.startswith('.')]
+sampleSummary = {}
 
-	ionomycin = []
-	sample = []
-	blank = []
+### Loop over all samples ###
+for sample in sampleNames:
 
-	filenames = extract_filename(path['ionomycin'])
-	for name in filenames:
+	### Set the paths ###
+	ionomycinPath = mainPath + '/' + sample + '/Ionomycin/'
+	samplePath = mainPath + '/' + sample + '/Sample/'
+	blankPath = mainPath + '/' + sample + '/Blank/'
 
-		ionomycin_mean = average_frame(path['ionomycin'] + name)
-		sample_mean = average_frame(path['sample'] + name)
-		blank_mean = average_frame(path['blank'] + name)
+	sampleOutput = pd.DataFrame()
 
-		sample_aligned, blank_aligned = img_alignment(ionomycin_mean, sample_mean, blank_mean)
+	### Obtain filenames for fields of view ###
+	fieldNames = local_tools.extract_filename(ionomycinPath)
+	fieldSummary = {}
 
-		ionomycin.append(ionomycin_mean)
-		sample.append(sample_aligned)
-		blank.append(blank_aligned)
+	### Loop over all fields of views ###
+	for c, field in enumerate(fieldNames, 1):
 
-	Results = pd.DataFrame()
+		### Average tiff files ###
+		ionomycinMean = local_tools.average_frame(ionomycinPath + field)
+		sampleMean = local_tools.average_frame(samplePath + field)
+		blankMean = local_tools.average_frame(blankPath + field)
 
-	for n in range(0, len(ionomycin)):
-		print('working on file number '+str(n))
+		### Align blank and sample images to the ionomycin image ###
+		sampleAligned, blankAligned = local_tools.img_alignment(ionomycinMean, sampleMean, blankMean)
 
-		coordinations = peak_locating(ionomycin[n], 50)
-		peak = pd.DataFrame({
-			'field': np.repeat(n, len(coordinations)),
-			'x': coordinations[:, 0],
-			'y': coordinations[:, 1]
-			})
+		### Locate the peaks on the ionomycin image ###
+		peaks = local_tools.peak_locating(ionomycinMean, 80)
+		
+		### Calculate the intensities of peaks with certain radius (in pixel) ###
+		ionInten = local_tools.intensities(ionomycinMean, peaks, 3)
+		samInten = local_tools.intensities(sampleAligned, peaks, 3)
+		blaInten = local_tools.intensities(blankAligned, peaks, 3)
+		
+		### Generate a dataframe which contains the result of current field of view ###
+		fieldOutput = pd.concat([
+			pd.DataFrame(np.tile(c, (len(peaks), 1))),
+			pd.DataFrame(peaks),
+			pd.DataFrame((samInten - blaInten)/(ionInten - blaInten)*100)				
+			],axis = 1)
 
-		result, error = influx_calculation(
-			ionomycin[n],
-			sample[n],
-			blank[n],
-			peak,
-			holder['High'],
-			holder['Low'],
-			int(holder['Radius']))
-		error_report['calculation field ' + str(n)] = error
+		fieldOutput.columns = ['Field', 'X', 'Y', 'Influx']
 
-		Results = pd.concat([Results, result])
+		### Record the mean influx of this field of view ###
+		fieldSummary[c] = fieldOutput.loc[:, 'Influx'].mean()
 
-	Results.to_excel(result_path+'/'+ item+'.xlsx')
-	print('Done with '+ sample_path)
+		### Merge the result of current field into the sample dataframe ###
+		sampleOutput = pd.concat([sampleOutput, fieldOutput])
 
-	return Results.influx.mean()
+	### Reset the index for sample dataframe ###
+	sampleOutput = sampleOutput.reset_index(drop = True)
 
+	### Record the mean influx of this sample ###
+	sampleSummary[sample] = sampleOutput.loc[:, 'Influx'].mean()
 
+	### Save the result for current sample ###
+	sampleOutput.to_csv(resultPath + '/raw/' + sample + '.csv', index=False)
+	fieldSummary_df = pd.DataFrame.from_dict(fieldSummary, orient='index', columns=['Influx'])
+	fieldSummary_df.to_csv(resultPath + '/raw/' + sample + '_field.csv')
 
-samplenames = os.listdir(Path)
-for item in samplenames:
-	influx = one_sample(Path, item)
-	with open(r"/Users/zengjiexia/Desktop/results/summary.txt",'a') as f:
-		f.write(item + '\t' + str(influx)+'\n')
-
-
+### Save sample summaries ###
+sampleSummary_df = pd.DataFrame.from_dict(sampleSummary, orient='index', columns=['Influx'])
+sampleSummary_df.to_csv(resultPath + '/summary.csv')

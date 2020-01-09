@@ -20,6 +20,7 @@ from scipy import ndimage
 import pandas as pd
 import numpy as np
 import math as ms
+import time
 
 
 def extract_filename(path):
@@ -117,7 +118,7 @@ def peak_locating(data, threshold):
 		if (a > 30) and (a < 480) and (b > 30) and (b < 480):
 			ab = np.array([np.uint16(a), np.uint16(b)])
 			xy_thresh = np.vstack((xy_thresh, ab))
-	xy_thresh = xy_thresh[1:]
+	xy_thresh = xy_thresh[1:] 
 
 	return xy_thresh
 
@@ -126,26 +127,26 @@ def intensities(image_array, peak_coor, radius):
 	"""
 	When the local peak is found, extract all the coordinates of pixels in a 'radius'
 	para: image_array - 2D array
-	para: peak_coor - pd.DataFrame {field:, x:, y:}
+	para: peak_coor - 2D array [[x1, y1], [x2, y2]]
 	para: radius - integer
-	return: intensities - pd.DataFrame  {0:}
+	return: intensities - 2D array [[I1], [I2]]
 	"""
 
 	x_ind, y_ind = np.indices(image_array.shape)
-	intensities = []
-
-	for x, y in zip(peak_coor['x'], peak_coor['y']):
+	intensities = np.zeros((0,1))
+	#intensities = []
+	for (x, y) in peak_coor:
 		intensity = 0
 		circle_points = ((x_ind - x)**2 + (y_ind - y)**2) <= radius**2
 		coor = np.where(circle_points == True)
 		coor = np.array(list(zip(coor[0], coor[1])))
 		for j in coor:
 			intensity += image_array[j[0], j[1]]
-		intensities.append(intensity)
-	intensities = pd.DataFrame(intensities)
+		intensities = np.vstack((intensities, intensity))
+		#intensities.append(intensity)
 
 	return intensities
-
+	#return np.array(intensities)
 
 def influx_calculation(Ionomycin, Sample, Blank, peak_coor, high, low, radius):
 	"""
@@ -164,13 +165,8 @@ def influx_calculation(Ionomycin, Sample, Blank, peak_coor, high, low, radius):
 	"""
 
 	error = 0
-	results = pd.concat(
-		[peak_coor, 
-		intensities(Ionomycin, peak_coor, radius), 
-		intensities(Sample, peak_coor, radius), 
-		intensities(Blank, peak_coor, radius)], 
-		axis=1
-		)
+	results = pd.DataFrame(peak_coor)
+
 	results.columns=['field', 'x', 'y', 'ionomycin', 'sample', 'blank']
 	results['influx'] = (results['sample'] - results['blank']) / (results['ionomycin'] - results['blank']) * 100
 
@@ -187,105 +183,101 @@ def influx_calculation(Ionomycin, Sample, Blank, peak_coor, high, low, radius):
 
 	return results, error
 
-
-class CalciumSample:
-
-	def __init__(self, sample_path, Holder):
-		
-		self.Holder = Holder
-		self.path = {
-		'main': sample_path,
-		'ionomycin': sample_path + '/Ionomycin/',
-		'sample': sample_path + '/Sample/',
-		'blank': sample_path + '/Blank/'
-		}
-		# Error = 0, Safe = 1
-		# error_report{'path': [main, ionomycin, sample, blank]}
-		self.error_report = {'path': [os.path.isdir(p) for p in self.path.values()]} 
-		
-	def img_correction(self):
-
-		self.no_of_field = 0
-
-		self.ionomycin = {}
-		self.sample = {}
-		self.blank = {}
-
-		filenames = extract_filename(self.path['ionomycin'])
-		for name in filenames:
-
-			ionomycin_mean = average_frame(self.path['ionomycin'] + name)
-			sample_mean = average_frame(self.path['sample'] + name)
-			blank_mean = average_frame(self.path['blank'] + name)
-
-			sample_aligned, blank_aligned = img_alignment(ionomycin_mean, sample_mean, blank_mean)
-
-			self.ionomycin[self.no_of_field] = ionomycin_mean
-			self.sample[self.no_of_field] = sample_aligned
-			self.blank[self.no_of_field] = blank_aligned
-			self.no_of_field += 1
-		
-		return 1
-
-	def peak_location(self, threshold):
-		# return a dataset containing peak located on each field based on inputed threshold
-		'''
-		if self.peaks in globals():	# clear cache
-			del self.peaks
-		else:
-			pass
-		'''
-		self.peaks = {} # self.peaks={'field': DataFrame{x:,y:}}
-		for n in range(0, self.no_of_field):
-			coordinations = peak_locating(self.ionomycin[n], threshold)
-			peak = pd.DataFrame({
-				'field': np.repeat(n, len(coordinations)),
-				'x': coordinations[:, 0],
-				'y': coordinations[:, 1]
-				})
-			self.peaks[n] = peak
-
-		return self.peaks
-
-	def influx(self):
-		'''
-		if self.results in globals():
-			del self.results
-		else:
-			pass
-		'''
-		self.results = {}
-		for n in range(0, self.no_of_field):
-			result, error = influx_calculation(
-				self.ionomycin[n],
-				self.sample[n],
-				self.blank[n],
-				self.peaks[n],
-				self.Holder['High'],
-				self.Holder['Low'],
-				int(self.Holder['Radius']))
-			self.error_report['calculation field ' + str(n)] = error
-			self.results[n] = result
-
-		return self.results
-		
-'''
 if __name__ == '__main__':
 	
 	Holder = {
-	'PATH' : os.path.dirname(os.path.abspath(__file__)),
+	'PATH' : os.path.dirname(os.path.abspath(__file__))+'/sample_data',
 	'Threshold' : '80',
 	'Radius' : '3',
 	'High' : 200,
 	'Low' : -100
 	}
 
-	print('Input -h or -help for mannul')
+	print('Running code in test mode')
+	if not os.path.isdir(Holder['PATH']):
+		print('Sample data not found. Exit test mode.')
+		quit()
 
-	stay = 1
-	command = None
-	while stay:
-		if command = '-h' or '-help':
-			print("""-info Current setting information
-				-path PATH change to a new path""")
-'''
+	resultPath = os.path.dirname(os.path.abspath(__file__))+'/sample_results'
+
+	test_round = 0
+
+	time_list = []
+	while test_round <= 0:
+
+		tic = time.clock()
+
+		### get all samples in the folder ###
+		sampleNames = [name for name in os.listdir(Holder['PATH']) if not name.startswith('.')]
+		sampleSummary = {}
+
+		### Loop over all samples ###
+		for sample in sampleNames:
+
+			### Set the paths ###
+			ionomycinPath = Holder['PATH'] + '/' + sample + '/Ionomycin/'
+			samplePath = Holder['PATH'] + '/' + sample + '/Sample/'
+			blankPath = Holder['PATH'] + '/' + sample + '/Blank/'
+
+			sampleOutput = pd.DataFrame()
+
+			### Obtain filenames for fields of view ###
+			fieldNames = extract_filename(ionomycinPath)
+			fieldSummary = {}
+
+			### Loop over all fields of views ###
+			for c, field in enumerate(fieldNames, 1):
+
+				### Average tiff files ###
+				ionomycinMean = average_frame(ionomycinPath + field)
+				sampleMean = average_frame(samplePath + field)
+				blankMean = average_frame(blankPath + field)
+
+				### Align blank and sample images to the ionomycin image ###
+				sampleAligned, blankAligned = img_alignment(ionomycinMean, sampleMean, blankMean)
+
+				### Locate the peaks on the ionomycin image ###
+				peaks = peak_locating(ionomycinMean, 80)
+				
+				### Calculate the intensities of peaks with certain radius (in pixel) ###
+				ionInten = intensities(ionomycinMean, peaks, 3)
+				samInten = intensities(sampleMean, peaks, 3)
+				blaInten = intensities(blankMean, peaks, 3)
+				
+				### Generate a dataframe which contains the result of current field of view ###
+				fieldOutput = pd.concat([
+					pd.DataFrame(np.tile(c, (len(peaks), 1))),
+					pd.DataFrame(peaks),
+					pd.DataFrame((samInten - blaInten)/(ionInten - blaInten)*100)				
+					],axis = 1)
+
+				fieldOutput.columns = ['Field', 'X', 'Y', 'Influx']
+
+				### Record the mean influx of this field of view ###
+				fieldSummary[c] = fieldOutput.loc[:, 'Influx'].mean()
+
+				### Merge the result of current field into the sample dataframe ###
+				sampleOutput = pd.concat([sampleOutput, fieldOutput])
+
+			### Reset the index for sample dataframe ###
+			sampleOutput = sampleOutput.reset_index(drop = True)
+
+			### Record the mean influx of this sample ###
+			sampleSummary[sample] = sampleOutput.loc[:, 'Influx'].mean()
+
+			### Save the result for current sample ###
+			sampleOutput.to_csv(resultPath + '/raw/' + sample + '.csv', index=False)
+			fieldSummary_df = pd.DataFrame.from_dict(fieldSummary, orient='index', columns=['Influx'])
+			fieldSummary_df.to_csv(resultPath + '/raw/' + sample + '_field.csv')
+
+		### Save sample summaries ###
+		sampleSummary_df = pd.DataFrame.from_dict(sampleSummary, orient='index', columns=['Influx'])
+		sampleSummary_df.to_csv(resultPath + '/summary.csv')
+
+		toc = time.clock()
+		time_list.append(toc-tic)
+		print(str(test_round))
+		test_round += 1
+	print(np.array(time_list).mean())
+
+	print('Exit test mode')
