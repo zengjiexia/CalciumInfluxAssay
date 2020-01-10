@@ -213,6 +213,7 @@ if __name__ == '__main__':
 
 		### Loop over all samples ###
 		for sample in sampleNames:
+			err = 0
 
 			### Set the paths ###
 			ionomycinPath = Holder['PATH'] + '/' + sample + '/Ionomycin/'
@@ -244,15 +245,32 @@ if __name__ == '__main__':
 				samInten = intensities(sampleMean, peaks, 3)
 				blaInten = intensities(blankMean, peaks, 3)
 				
+				influx = pd.DataFrame((samInten - blaInten)/(ionInten - blaInten)*100, columns=['Influx'])
+				
+				### for test ###
+				#influx = influx.append({'Influx': float('nan')}, ignore_index=True)
+
+				influx['Influx'] = [100 if i >= 100 and i <= 200 else i for i in influx['Influx']]
+				influx['Influx'] = [0 if i <= 0 and i >= -100 else i for i in influx['Influx']]
+				influx['Influx'] = ['error' if ms.isnan(np.float(i)) or i < -100 or i > 200 else i for i in influx['Influx']]
+
+				try:
+					err += (influx.Influx.values == 'error').sum()
+				except (AttributeError, FutureWarning) as e:
+					err += 0
+
+				influx = influx[influx.Influx != 'error']
+
+
 				### Generate a dataframe which contains the result of current field of view ###
 				fieldOutput = pd.concat([
-					pd.DataFrame(np.tile(c, (len(peaks), 1))),
-					pd.DataFrame(peaks),
-					pd.DataFrame((samInten - blaInten)/(ionInten - blaInten)*100)				
+					pd.DataFrame(np.tile(c, (len(peaks), 1)), columns=['Field']),
+					pd.DataFrame(peaks, columns=['X', 'Y']),
+					influx				
 					],axis = 1)
 
-				fieldOutput.columns = ['Field', 'X', 'Y', 'Influx']
-
+				print(fieldOutput)
+				quit()
 				### Record the mean influx of this field of view ###
 				fieldSummary[c] = fieldOutput.loc[:, 'Influx'].mean()
 
