@@ -30,6 +30,10 @@ for sample in sampleNames:
 	samplePath = mainPath + '/' + sample + '/Sample/'
 	blankPath = mainPath + '/' + sample + '/Blank/'
 
+	if not os.path.isdir(ionomycinPath):
+		print('Skip ' + sample + ' since data not found in the sample folder.')
+		continue
+
 	sampleOutput = pd.DataFrame()
 
 	### Obtain filenames for fields of view ###
@@ -86,7 +90,10 @@ for sample in sampleNames:
 			],axis = 1)
 
 		### Record the mean influx of this field of view ###
-		fieldSummary.append([c, fieldOutput.loc[:, 'Influx'].mean(), str(round(fieldErr/len(peaks)*100, 2)) + '%']) 
+		if len(peaks) == 0:
+			fieldSummary.append([c, fieldOutput.loc[:, 'Influx'].mean(), 'no peak'])
+		else:
+			fieldSummary.append([c, fieldOutput.loc[:, 'Influx'].mean(), str(round(fieldErr/len(peaks)*100, 2)) + '%']) 
 
 		### Merge the result of current field into the sample dataframe ###
 		sampleOutput = pd.concat([sampleOutput, fieldOutput])
@@ -98,7 +105,7 @@ for sample in sampleNames:
 	sampleSummary.append([sample, sampleOutput.loc[:, 'Influx'].mean(), str(round(sampleErr/len(sampleOutput)*100, 2)) + '%'])
 
 	print(sample + ' with mean influx: ' + str(sampleOutput.loc[:, 'Influx'].mean()))
-	print('Percentage of error in this sample: ' + str(err/len(sampleOutput)*100) + '%')
+	print('Percentage of error in this sample: ' + str(sampleErr/len(sampleOutput)*100) + '%')
 
 	### Save the result for current sample ###
 	sampleOutput.to_csv(resultPath + '/raw/' + sample + '.csv', index=False)
